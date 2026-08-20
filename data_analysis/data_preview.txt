@@ -1,0 +1,228 @@
+=== 샘플 레코드 1건 ===
+{
+  "id": "16410111295",
+  "type": "PushEvent",
+  "actor": {
+    "id": 311225839,
+    "login": "xngjester",
+    "display_login": "xngjester",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/xngjester",
+    "avatar_url": "https://avatars.githubusercontent.com/u/311225839?"
+  },
+  "repo": {
+    "id": 1319028752,
+    "name": "xngjester/tnkzbp",
+    "url": "https://api.github.com/repos/xngjester/tnkzbp"
+  },
+  "payload": {
+    "repository_id": 1319028752,
+    "push_id": 38717051838,
+    "ref": "refs/heads/main",
+    "head": "e379541a945d0d4743975bd67593a4006564a7ca",
+    "before": "618ef8fb72e2c9f1d962662c2926a96b29197192"
+  },
+  "public": true,
+  "created_at": "2026-08-01T15:00:00Z"
+}
+
+=== 공통 스키마 골격 (500건 기준) ===
+{
+  "id": "VARCHAR",
+  "type": "VARCHAR",
+  "actor": {
+    "id": "UBIGINT",
+    "login": "VARCHAR",
+    "display_login": "VARCHAR",
+    "gravatar_id": "VARCHAR",
+    "url": "VARCHAR",
+    "avatar_url": "VARCHAR"
+  },
+  "repo": {
+    "id": "UBIGINT",
+    "name": "VARCHAR",
+    "url": "VARCHAR"
+  },
+  "payload": {
+    "repository_id": "UBIGINT",
+    "push_id": "UBIGINT",
+    "ref": "VARCHAR",
+    "head": "VARCHAR",
+    "before": "VARCHAR",
+    "ref_type": "VARCHAR",
+    "full_ref": "VARCHAR",
+    "master_branch": "VARCHAR",
+    "description": "VARCHAR",
+    "pusher_type": "VARCHAR",
+    "action": "VARCHAR",
+    "issue": {
+      "url": "VARCHAR",
+      "repository_url": "VARCHAR",
+      "labels_url": "VARCHAR",
+      "comments_url": "VARCHAR",
+      "events_url": "VARCHAR",
+      "html_url": "VARCHAR",
+      "id": "UBIGINT",
+      "node_id": "VARCHAR",
+      "number": "UBIGINT",
+      "title": "VARCHAR",
+      "user": {
+        "login": "VARCHAR",
+        "id": "UBIGINT",
+        "node_id": "VARCHAR",
+        "avatar_url": "VARCHAR",
+        "gravatar_id": "VARCHAR",
+        "url": "VARCHAR",
+        "html_url": "VARCHAR",
+        "followers_url": "VARCHAR",
+        "following_url": "VARCHAR",
+        "gists_url": "VARCHAR",
+        "starred_url": "VARCHAR",
+        "subscriptions_url": "VARCHAR",
+        "organizations_url": "VARCHAR",
+        "repos_url": "VARCHAR",
+        "events_url": "VARCHAR",
+        "received_events_url": "VARCHAR",
+        "type": "VARCHAR",
+        "user_view_type": "VARCHAR",
+        "site_admin": "BOOLEAN"
+      },
+      "labels": [
+        {
+          "id": "UBIGINT",
+          "node_id": "VARCHAR",
+          "url": "VARCHAR",
+          "name": "VARCHAR",
+          "color": "VARCHAR",
+          "default": "BOOLEAN",
+          "description": "VARCHAR"
+        }
+      ],
+      "state": "VARCHAR",
+      "locked": "BOOLEAN",
+      "assignees": [
+        "NULL"
+      ],
+      "milestone": "NULL",
+      "comments": "UBIGINT",
+      "created_at": "VARCHAR",
+      "updated_at": "VARCHAR",
+      "closed_at": "VARCHAR",
+      "assignee": "NULL",
+      "active_lock_reason": "NULL",
+      "draft": "BOOLEAN",
+      "pull_request": {
+        "url": "VARCHAR",
+        "html_url": "VARCHAR",
+        "diff_url": "VARCHAR",
+        "patch_url": "VARCHAR",
+        "merged_at": "NULL"
+      },
+      "body": "VARCHAR",
+      "reactions": {
+        "url": "VARCHAR",
+        "total_count": "UBIGINT",
+        "+1": "UBIGINT",
+        "-1": "UBIGINT",
+        "laugh": "UBIGINT",
+        "hooray": "UBIGINT",
+        "confused": "UBIGINT",
+        "heart": "UBIGINT",
+        "rocket": "UBIGINT",
+        "eyes": "UBIGINT"
+      },
+      "timeline_url": "VARCHAR",
+      "performed_via_github_app": "NULL",
+      "state_reason": "VARCHAR",
+      "sub_issues_summary": {
+        "total": "UBIGINT",
+        "completed": "UBIGINT",
+        "percent_completed": "UBIGINT"
+      },
+      "issue_dependencies_summary": {
+        "blocked_by": "UBIGINT",
+        "total_blocked_by": "UBIGINT",
+        "blocking": "UBIGINT",
+        "total_blocking": "UBIGINT"
+      },
+      "pinned_comment": "NULL"
+    },
+    "comment": {
+      "url": "VARCHAR",
+      "html_url": "VARCHAR",
+      "issue_url": "VARCHAR",
+      "id": "UBIGINT",
+      "node_id": "VARCHAR",
+      "user": {
+        "login": "VARCHAR",
+        "id": "UBIGINT",
+        "node_id": "VARCHAR",
+        "avatar_url": "VARCHAR",
+        "gravatar_id": "VARCHAR",
+        "url": "VARCHAR",
+        "html_url": "VARCHAR",
+        "followers_url": "VARCHAR",
+        "following_url": "VARCHAR",
+        "gists_url": "VARCHAR",
+        "starred_url": "VARCHAR",
+        "subscriptions_url": "VARCHAR",
+        "organizations_url": "VARCHAR",
+        "repos_url": "VARCHAR",
+        "events_url": "VARCHAR",
+        "received_events_url": "VARCHAR",
+        "type": "VARCHAR",
+        "user_view_type": "VARCHAR",
+        "site_admin": "BOOLEAN"
+      },
+      "created_at": "VARCHAR",
+      "updated_at": "VARCHAR",
+      "body": "VARCHAR",
+      "reactions": {
+        "url": "VARCHAR",
+        "total_count": "UBIGINT",
+        "+1": "UBIGINT",
+        "-1": "UBIGINT",
+        "laugh": "UBIGINT",
+        "hooray": "UBIGINT",
+        "confused": "UBIGINT",
+        "heart": "UBIGINT",
+        "rocket": "UBIGINT",
+        "eyes": "UBIGINT"
+      },
+      "performed_via_github_app": "NULL",
+      "minimized": "NULL"
+    }
+  },
+  "public": "BOOLEAN",
+  "created_at": "VARCHAR",
+  "org": {
+    "id": "UBIGINT",
+    "login": "VARCHAR",
+    "gravatar_id": "VARCHAR",
+    "url": "VARCHAR",
+    "avatar_url": "VARCHAR"
+  }
+}
+
+=== 이벤트 타입 분포 ===
+┌───────────────────────────────┬────────┐
+│          event_type           │  cnt   │
+│            varchar            │ int64  │
+├───────────────────────────────┼────────┤
+│ PushEvent                     │ 160767 │
+│ CreateEvent                   │   5425 │
+│ DeleteEvent                   │   2229 │
+│ PullRequestEvent              │    144 │
+│ IssueCommentEvent             │     51 │
+│ IssuesEvent                   │     42 │
+│ PullRequestReviewEvent        │     32 │
+│ WatchEvent                    │     32 │
+│ PullRequestReviewCommentEvent │     31 │
+│ ReleaseEvent                  │     17 │
+│ ForkEvent                     │     11 │
+│ PublicEvent                   │      2 │
+│ MemberEvent                   │      2 │
+│ CommitCommentEvent            │      2 │
+│ GollumEvent                   │      1 │
+└───────────────────────────────┴────────┘
+  15 rows                      2 columns
