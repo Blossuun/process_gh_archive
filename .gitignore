@@ -1,5 +1,4 @@
 # 데이터 제외
-data/
 *.csv
 *.json
 *.gz
