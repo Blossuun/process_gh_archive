@@ -72,7 +72,8 @@ gcloud auth application-default set-quota-project YOUR_PROJECT_ID
 WSL2에서 브라우저가 자동으로 열리지 않으면, 출력된 URL을 Windows 브라우저에 붙여넣고
 받은 인증 코드를 터미널에 입력합니다.
 
-두 번째 명령을 생략하면 API 호출마다 quota project 경고가 발생합니다.
+두 번째 명령이 실패하면(신규 프로젝트에서 Cloud Resource Manager API가 비활성인 경우 등)
+아래 4장의 `--project` 옵션이나 환경변수로 프로젝트 ID를 지정하면 됩니다.
 
 서비스 계정 키 파일은 필요하지 않습니다. 개인 계정 ADC로 충분하며,
 키 파일이 저장소에 커밋되는 사고도 방지됩니다.
@@ -83,6 +84,29 @@ WSL2에서 브라우저가 자동으로 열리지 않으면, 출력된 URL을 Wi
 uv run run_query.py query/table_inventory.sql --dry-run   # 예상 스캔량만 확인
 uv run run_query.py query/table_inventory.sql             # 실행
 ```
+
+프로젝트 ID는 다음 순서로 결정됩니다.
+
+1. `--project YOUR_PROJECT_ID` 옵션
+2. `GOOGLE_CLOUD_PROJECT` 환경변수
+3. `run_query.py` 옆의 `.env` 파일
+4. ADC 자격증명의 `quota_project_id`
+
+넷 다 없으면 러너가 설정 방법을 안내하고 중단합니다.
+
+가장 편한 방법은 `.env`입니다. `.env.example`을 복사해서 프로젝트 ID만 채우세요.
+
+```
+copy .env.example .env      # PowerShell
+cp .env.example .env        # bash
+```
+
+```
+GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID
+```
+
+`.env`는 `.gitignore`에 등록되어 커밋되지 않습니다.
+프로젝트 ID는 사람마다 다르므로, 저장소에는 `.env.example`만 남깁니다.
 
 - 결과는 기본적으로 `results/<쿼리파일명>.json`에 저장됩니다.
 - 실행 이력과 비용은 `query_log.csv`에 자동으로 누적됩니다.
@@ -107,6 +131,9 @@ uv run run_query.py query/table_inventory.sql             # 실행
 ```
 BQ_EDA/
 ├── README.md
+├── .env                프로젝트 ID (git-ignored)
+├── .env.example        .env 템플릿
+├── .gitignore
 ├── run_query.py       실행 러너
 ├── query/             쿼리 원본 (.sql)
 ├── results/           쿼리 결과 (.json)
