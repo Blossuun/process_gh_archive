@@ -14,13 +14,28 @@ import argparse
 import csv
 import json
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
+from statistics import median
 
 INVENTORY_FILE = Path("results/table_inventory.json")
 REPORT_FILE = Path("analysis/table_inventory_report.md")
 MONTHLY_FILE = Path("analysis/monthly_volume.csv")
 YEARLY_FILE = Path("analysis/yearly_volume.csv")
+DAILY_FILE = Path("analysis/daily_volume.csv")
+
+# A day whose row count falls below this fraction of the median of its
+# surrounding window is flagged as a candidate partial load.
+ROLLING_WINDOW = 28
+ANOMALY_RATIO = 0.60
+
+DAILY_FIELDS = [
+    "table_id",
+    "row_count",
+    "rolling_median",
+    "ratio",
+    "is_anomaly",
+]
 
 # A month whose bytes-per-row differs from the previous month by more than this
 # fraction is flagged as a candidate structural break.
@@ -190,6 +205,54 @@ def build_monthly_rows(records: list[dict]) -> list[dict]:
     return rows
 
 
+def build_daily_rows(
+    records: list[dict],
+    window: int = ROLLING_WINDOW,
+    ratio_threshold: float = ANOMALY_RATIO,
+) -> list[dict]:
+    """Flag days whose row count sits far below its neighbourhood.
+
+    The window is centred and excludes the day itself, so a single bad day is
+    compared against normal neighbours rather than against itself. Neighbours
+    are taken from the observed series, so missing days do not shift the
+    window onto zeros.
+    """
+    ordered = sorted(records, key=lambda record: record["table_id"])
+    counts = [record["row_count"] for record in ordered]
+    half = window // 2
+
+    rows = []
+    for index, record in enumerate(ordered):
+        low = max(0, index - half)
+        high = min(len(counts), index + half + 1)
+        neighbours = counts[low:index] + counts[index + 1 : high]
+        rolling_median = median(neighbours) if neighbours else 0
+        ratio = record["row_count"] / rolling_median if rolling_median else None
+        rows.append(
+            {
+                "table_id": record["table_id"],
+                "row_count": record["row_count"],
+                "rolling_median": round(rolling_median),
+                "ratio": None if ratio is None else round(ratio, 3),
+                "is_anomaly": int(ratio is not None and ratio < ratio_threshold),
+            }
+        )
+    return rows
+
+
+def group_anomaly_runs(daily_rows: list[dict]) -> list[list[dict]]:
+    """Group flagged days into consecutive calendar runs."""
+    flagged = [row for row in daily_rows if row["is_anomaly"]]
+    runs: list[list[dict]] = []
+    for row in flagged:
+        current = to_date(row["table_id"])
+        if runs and current - to_date(runs[-1][-1]["table_id"]) == timedelta(days=1):
+            runs[-1].append(row)
+        else:
+            runs.append([row])
+    return runs
+
+
 def build_yearly_rows(records: list[dict]) -> list[dict]:
     yearly = aggregate(records, key_length=4)
     rows = []
@@ -276,54 +339,15 @@ def break_table(
     return lines
 
 
-def creation_lag_days(record: dict) -> int:
-    created = datetime.fromisoformat(record["created_at"]).date()
-    return (created - to_date(record["table_id"])).days
-
-
-def find_lagged(records: list[dict]) -> list[tuple[str, str, int]]:
-    """Tables created later than their own date, i.e. delayed ingestion."""
-    lagged = []
-    for record in records:
-        lag = creation_lag_days(record)
-        if lag > 0:
-            lagged.append((record["table_id"], record["created_at"][:10], lag))
-    return lagged
-
-
-def find_suspect_days(
-    records: list[dict],
-    missing_runs: list[list[date]],
-    lagged: list[tuple[str, str, int]],
-) -> list[tuple[str, str]]:
-    """Days worth checking hour by hour, with the reason each was picked.
-
-    An outage rarely stops at midnight UTC, so the days bordering a gap are the
-    most likely to be present but only partly loaded.
-    """
-    present = {to_date(r["table_id"]) for r in records}
-    reasons: dict[date, list[str]] = defaultdict(list)
-
-    for run in missing_runs:
-        for neighbour, side in ((run[0] - timedelta(days=1), "앞"), (run[-1] + timedelta(days=1), "뒤")):
-            if neighbour in present:
-                reasons[neighbour].append(f"결측 {run[0]}~{run[-1]} 의 {side}날")
-
-    for table_id, _, lag in lagged:
-        reasons[to_date(table_id)].append(f"생성 지연 {lag}일")
-
-    return [
-        (day.strftime("%Y%m%d"), " / ".join(notes))
-        for day, notes in sorted(reasons.items())
-    ]
-
-
 def build_report(
     records: list[dict],
     missing_runs: list[list[date]],
+    daily_rows: list[dict],
     yearly_rows: list[dict],
     monthly_rows: list[dict],
     threshold: float,
+    window: int = ROLLING_WINDOW,
+    ratio_threshold: float = ANOMALY_RATIO,
     date_filter: str | None = None,
 ) -> str:
     dates = sorted(to_date(r["table_id"]) for r in records)
@@ -361,41 +385,41 @@ def build_report(
         lines.append("결측 없음.")
     lines.append("")
 
-    lines.append("## 생성 지연")
+    lines.append("## 일별 적재량 이상")
     lines.append("")
     lines.append(
-        "BigQuery 의 creation_time 은 이벤트 발생 시점이 아니라 테이블 객체가 "
-        "만들어진 시점이다. 일일 자동 적재 구간에서 이 값이 테이블 날짜보다 "
-        "늦다면 그날 적재가 지연됐다는 뜻이다. 결측으로도, 볼륨 급변으로도 "
-        "잡히지 않는 이상을 드러낸다."
+        f"각 날의 행 수를 중심 {window}일 창의 중앙값과 비교한다. 창에서 그날 "
+        "자신은 제외하므로, 하루짜리 이상은 정상 이웃과 대비된다. "
+        f"중앙값의 {ratio_threshold:.0%} 미만이면 부분 적재 후보로 본다. "
+        "테이블이 있으면서 내용이 덜 들어온 날을 잡기 위한 것이며, "
+        "BigQuery 추가 조회 없이 인벤토리만으로 계산한다."
     )
-    lines.append("")
-    lagged = find_lagged(records)
-    if lagged:
-        lines.append("| 테이블 | 생성일 | 지연 |")
-        lines.append("|---|---|---|")
-        for table_id, created, lag in lagged:
-            lines.append(f"| {table_id} | {created} | {lag}일 |")
-    else:
-        lines.append("생성 지연 없음.")
-    lines.append("")
-
-    lines.append("## 적재 이상 의심일")
     lines.append("")
     lines.append(
-        "시간대별 적재 완전성을 확인할 후보. 적재 장애는 자정 UTC 에 맞춰 "
-        "끝나지 않으므로, 결측 구간의 앞뒤 날은 테이블이 있으면서도 일부 "
-        "시간대만 적재됐을 수 있다."
+        "장기간에 걸친 저하는 창의 중앙값도 함께 낮아지므로 이 방법으로 "
+        "잡히지 않는다. 그런 구간은 월별 급변 표에서 확인할 것."
     )
     lines.append("")
-    suspects = find_suspect_days(records, missing_runs, lagged)
-    if suspects:
-        lines.append("| 날짜 | 사유 |")
-        lines.append("|---|---|")
-        for table_id, reason in suspects:
-            lines.append(f"| {table_id} | {reason} |")
+    anomaly_runs = group_anomaly_runs(daily_rows)
+    flagged_count = sum(len(run) for run in anomaly_runs)
+    lines.append(
+        f"- 전체 {len(daily_rows):,}일 중 {flagged_count}일, "
+        f"{len(anomaly_runs)}개 구간"
+    )
+    lines.append("")
+    if anomaly_runs:
+        lines.append("| 시작 | 종료 | 일수 | 최저 비율 | 해당 일 행 수 |")
+        lines.append("|---|---|---|---|---|")
+        for run in anomaly_runs:
+            worst = min(run, key=lambda row: row["ratio"])
+            lines.append(
+                f"| {run[0]['table_id']} | {run[-1]['table_id']} | {len(run)} "
+                f"| {worst['ratio']:.3f} | {worst['row_count']:,} |"
+            )
+        lines.append("")
+        lines.append(f"일자별 전체 수치는 `{DAILY_FILE.as_posix()}` 참조.")
     else:
-        lines.append("의심일 없음.")
+        lines.append("이상일 없음.")
     lines.append("")
 
     lines.append("## 연도별 볼륨")
@@ -467,8 +491,21 @@ def main() -> int:
     parser.add_argument("--inventory", type=Path, default=INVENTORY_FILE)
     parser.add_argument("--report", type=Path, default=REPORT_FILE)
     parser.add_argument("--yearly", type=Path, default=YEARLY_FILE)
+    parser.add_argument("--daily", type=Path, default=DAILY_FILE)
     parser.add_argument("--monthly", type=Path, default=MONTHLY_FILE)
     parser.add_argument("--threshold", type=float, default=BREAK_THRESHOLD)
+    parser.add_argument(
+        "--window",
+        type=int,
+        default=ROLLING_WINDOW,
+        help=f"rolling median window in days (default: {ROLLING_WINDOW})",
+    )
+    parser.add_argument(
+        "--ratio",
+        type=float,
+        default=ANOMALY_RATIO,
+        help=f"flag days below this fraction of the median (default: {ANOMALY_RATIO})",
+    )
     parser.add_argument(
         "--since",
         help="lower bound table_id, inclusive (YYYYMMDD)",
@@ -488,9 +525,11 @@ def main() -> int:
         print("no tables left after filtering")
         return 1
     missing_runs = find_missing_runs(records)
+    daily_rows = build_daily_rows(records, args.window, args.ratio)
     yearly_rows = build_yearly_rows(records)
     monthly_rows = build_monthly_rows(records)
 
+    write_csv(daily_rows, DAILY_FIELDS, args.daily)
     write_csv(yearly_rows, YEARLY_FIELDS, args.yearly)
     write_csv(monthly_rows, MONTHLY_FIELDS, args.monthly)
 
@@ -499,13 +538,22 @@ def main() -> int:
         date_filter = f"since={args.since or '-'}, until={args.until or '-'}"
 
     report = build_report(
-        records, missing_runs, yearly_rows, monthly_rows, args.threshold, date_filter
+        records,
+        missing_runs,
+        daily_rows,
+        yearly_rows,
+        monthly_rows,
+        args.threshold,
+        args.window,
+        args.ratio,
+        date_filter,
     )
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report, encoding="utf-8")
 
     print(f"tables  : {len(records):,}")
     print(f"report  : {args.report}")
+    print(f"daily   : {args.daily}")
     print(f"yearly  : {args.yearly}")
     print(f"monthly : {args.monthly}")
     return 0
