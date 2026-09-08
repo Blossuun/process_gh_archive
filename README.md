@@ -78,7 +78,11 @@ Iceberg 가 `add_files` 로 기존 파일을 그대로 흡수할 수 있어야 �
 - [ ] Phase 4 — 성능 튜닝
 - [ ] Phase 5 — gold
 
-## 문서
+## BigQuery 사전 조사
+
+위치: [`data_analysis/BQ_DEA`](data_analysis/BQ_EDA)
+
+### 문서
 
 | 문서 | 내용 |
 |---|---|
@@ -86,3 +90,15 @@ Iceberg 가 `add_files` 로 기존 파일을 그대로 흡수할 수 있어야 �
 | [`silver_design.md`](silver_design.md) | 테이블 스키마, 드리프트 감지, 단계별 계획 |
 | [`data_analysis/BQ_EDA/analysis/findings.md`](data_analysis/BQ_EDA/analysis/findings.md) | 데이터 상태와 근거 |
 | [`data_analysis/BQ_EDA/analysis/field_reference.md`](data_analysis/BQ_EDA/analysis/field_reference.md) | 필드별 내용과 함정 |
+
+## Phase 0 결과
+
+임의대로 `2020-08-12`, `2022-08-17`, `2024-08-14`, `2025-09-24`의 데이터를 다운로드해 이벤트 개수, 압축 전 용량, 해제 후 용량, 이벤트(행)의 평균 용량을 측정.
+
+압축률은 대략 7X (1/7 수준)을 보여줌.  
+해당 날짜들 중 가장 용량이 큰 날짜는 `2024-08-14`로 압축 해제 기준 **16GB** 정도이며,  
+가장 용량이 컸던 시간대의 용량은 15시로 압축 해제 기준 **920MB**정도임.
+
+배치 처리 단위를 용량으로 정했을 때, 1GB 이상의 용량을 가진 시간대가 존재할 수 있음을 생각하고 설계해야함.
+
+원본 GH Archive 데이터 용량을 BigQuery에서 가져온 정보 [`table_inventory.json`](data_analysis\BQ_EDA\results\table_inventory.json)와 비교했을 때, 로컬이 4% 정도 크다고 나타나는 것 외엔 BQ에 표시된 용량에 거의 차이가 없음. 이는 JSON 파일의 뼈대를 뺀 데이터의 용량 차이로 생각됨.
