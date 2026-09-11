@@ -71,7 +71,7 @@ Iceberg 가 `add_files` 로 기존 파일을 그대로 흡수할 수 있어야 �
 ## 진행 상황
 
 - [x] BigQuery 사전 조사 — 필드 카탈로그, 데이터 품질 파악
-- [ ] Phase 0 — 원본 `.json.gz` 용량 실측
+- [x] Phase 0 — 원본 `.json.gz` 용량 실측
 - [ ] Phase 1 — bronze
 - [ ] Phase 2 — silver_events
 - [ ] Phase 3 — silver_refs, silver_pull_requests
@@ -102,3 +102,7 @@ Iceberg 가 `add_files` 로 기존 파일을 그대로 흡수할 수 있어야 �
 배치 처리 단위를 용량으로 정했을 때, 1GB 이상의 용량을 가진 시간대가 존재할 수 있음을 생각하고 설계해야함.
 
 원본 GH Archive 데이터 용량을 BigQuery에서 가져온 정보 [`table_inventory.json`](data_analysis\BQ_EDA\results\table_inventory.json)와 비교했을 때, 로컬이 4% 정도 크다고 나타나는 것 외엔 BQ에 표시된 용량에 거의 차이가 없음. 이는 JSON 파일의 뼈대를 뺀 데이터의 용량 차이로 생각됨.
+
+
+
+## 
