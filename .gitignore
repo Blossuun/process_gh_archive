@@ -14,3 +14,10 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Phase 0 증거 파일
+!data/meta/download_manifest.csv
+!data/meta/raw_file_stats.csv
+
+# BQ 조사 결과
+!data_analysis/BQ_EDA/results/table_inventory.json
