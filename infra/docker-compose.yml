@@ -1,0 +1,138 @@
+# 로컬 파이프라인 기반. Airflow 는 Phase 1 이후에 붙인다.
+#   docker compose up -d          Kafka + Spark 기동, 토픽 생성까지
+#   docker compose --profile history up -d    Spark History Server 추가
+
+name: gharchive
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  kafka:
+    image: apache/kafka:${KAFKA_VERSION}
+    container_name: gharchive-kafka
+    restart: unless-stopped
+    <<: *logging
+    ports:
+      - "29092:29092"          # 호스트(프로듀서)용. 컨테이너 간에는 kafka:9092
+    environment:
+      CLUSTER_ID: ${CLUSTER_ID}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      # 단일 브로커이므로 복제 관련 값은 전부 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # 토픽은 create-topics.sh 만이 만든다. 오타로 토픽이 생기는 사고를 막는다.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+
+      # 실측 1.9MB 근거. 브로커 쪽 2곳.
+      KAFKA_MESSAGE_MAX_BYTES: ${MAX_MESSAGE_BYTES}
+      KAFKA_REPLICA_FETCH_MAX_BYTES: ${MAX_MESSAGE_BYTES}
+
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xmx${KAFKA_HEAP} -Xms${KAFKA_HEAP}
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    mem_limit: 2g
+    cpus: 2
+
+  # 토픽 생성 후 종료되는 일회성 작업. 선언적 구성을 코드로 남긴다.
+  kafka-init:
+    image: apache/kafka:${KAFKA_VERSION}
+    container_name: gharchive-kafka-init
+    depends_on:
+      kafka: { condition: service_healthy }
+    environment:
+      TOPIC_PARTITIONS: ${TOPIC_PARTITIONS}
+      MAX_MESSAGE_BYTES: ${MAX_MESSAGE_BYTES}
+      RETENTION_BYTES_PER_PARTITION: ${RETENTION_BYTES_PER_PARTITION}
+      RETENTION_MS: ${RETENTION_MS}
+    volumes:
+      - ./docker/kafka/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/bash", "/create-topics.sh"]
+    restart: "no"
+
+  spark-master:
+    build:
+      context: ./docker/spark
+      args: { SPARK_VERSION: "${SPARK_VERSION}" }
+    image: gharchive/spark:${SPARK_VERSION}
+    container_name: gharchive-spark-master
+    restart: unless-stopped
+    <<: *logging
+    command: ["/opt/spark/sbin/start-master.sh"]
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_MASTER_HOST: spark-master
+    ports:
+      - "8080:8080"            # Master UI
+      - "4040:4040"            # 실행 중인 애플리케이션 UI
+    volumes:
+      - ../data:/data          # bronze/silver 산출물. 호스트에서 용량을 직접 잰다.
+      - ../bronze:/opt/bronze:ro
+      - spark-events:/opt/spark/events
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 2g
+    cpus: 2
+
+  spark-worker:
+    image: gharchive/spark:${SPARK_VERSION}
+    container_name: gharchive-spark-worker
+    restart: unless-stopped
+    <<: *logging
+    depends_on:
+      spark-master: { condition: service_healthy }
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_WORKER_CORES: ${SPARK_WORKER_CORES}
+      SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY}
+    volumes:
+      - ../data:/data
+      - ../bronze:/opt/bronze:ro
+      - spark-events:/opt/spark/events
+    # 컨테이너 한계를 워커 몫보다 약간 크게 잡는다. JVM 힙 밖 메모리가 따로 필요하다.
+    mem_limit: 7g
+    cpus: 6
+
+  spark-history:
+    image: gharchive/spark:${SPARK_VERSION}
+    container_name: gharchive-spark-history
+    profiles: [history]
+    restart: unless-stopped
+    command: ["/opt/spark/sbin/start-history-server.sh"]
+    environment:
+      SPARK_NO_DAEMONIZE: "true"
+      SPARK_HISTORY_OPTS: -Dspark.history.fs.logDirectory=file:/opt/spark/events
+    ports:
+      - "18080:18080"
+    volumes:
+      - spark-events:/opt/spark/events
+    mem_limit: 1g
+
+volumes:
+  kafka-data:
+  spark-events:

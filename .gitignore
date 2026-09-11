@@ -4,6 +4,13 @@
 *.gz
 *.txt
 *.png
+*.db
 
 # 환경변수 제외
 *.env
+
+# pycache 제외
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
